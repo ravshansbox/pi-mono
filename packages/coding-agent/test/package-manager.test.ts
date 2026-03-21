@@ -1443,5 +1443,68 @@ export default function(api) { api.registerTool({ name: "test", description: "te
 			const [, options] = fetchMock.mock.calls[0] as [string, RequestInit | undefined];
 			expect(options?.signal).toBeDefined();
 		});
+
+		it("should skip git update when local HEAD matches remote HEAD", async () => {
+			const gitSource = "git:github.com/example/repo";
+			settingsManager.setProjectPackages([gitSource]);
+
+			// Create installed git repository
+			const parsedGitSource = (packageManager as any).parseSource(gitSource);
+			const installedPath = (packageManager as any).getGitInstallPath(parsedGitSource, "project") as string;
+			mkdirSync(installedPath, { recursive: true });
+
+			// Mock git commands
+			const runCommandSpy = vi.spyOn(packageManager as any, "runCommand").mockResolvedValue(undefined);
+			const runCommandCaptureSpy = vi.spyOn(packageManager as any, "runCommandCapture");
+			// Local HEAD query
+			runCommandCaptureSpy.mockResolvedValueOnce("abc123def456");
+			// Mock getRemoteGitHead to return the same hash
+			vi.spyOn(packageManager as any, "getRemoteGitHead").mockResolvedValue("abc123def456");
+
+			await packageManager.update(gitSource);
+
+			// Should not have called reset, clean, or npm install
+			expect(runCommandSpy).not.toHaveBeenCalledWith(
+				"git",
+				expect.arrayContaining(["reset", "--hard"]),
+				expect.anything(),
+			);
+			expect(runCommandSpy).not.toHaveBeenCalledWith(
+				"git",
+				expect.arrayContaining(["clean", "-fdx"]),
+				expect.anything(),
+			);
+			expect(runCommandSpy).not.toHaveBeenCalledWith("npm", expect.arrayContaining(["install"]), expect.anything());
+		});
+
+		it("should perform git update when local HEAD differs from remote HEAD", async () => {
+			const gitSource = "git:github.com/example/repo";
+			settingsManager.setProjectPackages([gitSource]);
+
+			// Create installed git repository
+			const parsedGitSource = (packageManager as any).parseSource(gitSource);
+			const installedPath = (packageManager as any).getGitInstallPath(parsedGitSource, "project") as string;
+			mkdirSync(installedPath, { recursive: true });
+
+			// Mock git commands
+			const runCommandSpy = vi.spyOn(packageManager as any, "runCommand").mockResolvedValue(undefined);
+			const runCommandCaptureSpy = vi.spyOn(packageManager as any, "runCommandCapture");
+			runCommandCaptureSpy.mockResolvedValueOnce("localHash"); // local HEAD
+			vi.spyOn(packageManager as any, "getRemoteGitHead").mockResolvedValue("remoteHash"); // remote HEAD
+
+			await packageManager.update(gitSource);
+
+			// Should have called reset and clean
+			expect(runCommandSpy).toHaveBeenCalledWith(
+				"git",
+				expect.arrayContaining(["reset", "--hard"]),
+				expect.anything(),
+			);
+			expect(runCommandSpy).toHaveBeenCalledWith(
+				"git",
+				expect.arrayContaining(["clean", "-fdx"]),
+				expect.anything(),
+			);
+		});
 	});
 });

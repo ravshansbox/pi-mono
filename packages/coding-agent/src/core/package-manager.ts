@@ -1463,6 +1463,17 @@ export class DefaultPackageManager implements PackageManager {
 		// Fetch latest from remote (handles force-push by getting new history)
 		await this.runCommand("git", ["fetch", "--prune", "origin"], { cwd: targetDir });
 
+		// Check if local HEAD matches remote HEAD to avoid unnecessary reset/clean/install
+		const localHead = await this.runCommandCapture("git", ["rev-parse", "HEAD"], { cwd: targetDir }).catch(
+			() => null,
+		);
+		const remoteHead = await this.getRemoteGitHead(targetDir).catch(() => null);
+
+		if (localHead && remoteHead && localHead.trim() === remoteHead.trim()) {
+			// Already up-to-date, skip destructive operations
+			return;
+		}
+
 		// Reset to tracking branch. Fall back to origin/HEAD when no upstream is configured.
 		try {
 			await this.runCommand("git", ["reset", "--hard", "@{upstream}"], { cwd: targetDir });

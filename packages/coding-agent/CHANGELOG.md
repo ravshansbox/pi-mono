@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Fixed `pi update` for git-based extensions to skip unnecessary reinstallation when local HEAD matches remote HEAD, improving update performance.
+
 ## [0.61.1] - 2026-03-20
 
 ### New Features
