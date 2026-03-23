@@ -2135,7 +2135,93 @@ describe("Editor component", () => {
 			assert.strictEqual(editor.isShowingAutocomplete(), false);
 		});
 
-		it("applies exact typed slash-argument value on Enter even when first item is highlighted", () => {
+		it("submits with single Enter when slash command argument is fully typed and completion is visible", () => {
+			const editor = new Editor(createTestTUI(), defaultEditorTheme);
+
+			const mockProvider: AutocompleteProvider = {
+				getSuggestions: (lines, _cursorLine, cursorCol) => {
+					const text = lines[0] || "";
+					const beforeCursor = text.slice(0, cursorCol);
+					const argtestMatch = beforeCursor.match(/^\/argtest\s+(\S+)$/);
+					if (argtestMatch) {
+						const argumentText = argtestMatch[1]!;
+						const allArguments = [
+							{ value: "one", label: "one" },
+							{ value: "two", label: "two" },
+							{ value: "three", label: "three" },
+						];
+						const filtered = allArguments.filter((arg) => arg.value.startsWith(argumentText));
+						if (filtered.length > 0) return { items: filtered, prefix: argumentText };
+					}
+					return null;
+				},
+				applyCompletion,
+			};
+
+			editor.setAutocompleteProvider(mockProvider);
+
+			let submitted = "";
+			editor.onSubmit = (text) => {
+				submitted = text;
+			};
+
+			for (const ch of "/argtest two") {
+				editor.handleInput(ch);
+			}
+
+			assert.strictEqual(editor.getText(), "/argtest two");
+			assert.strictEqual(editor.isShowingAutocomplete(), true);
+
+			// Single Enter should submit, not just dismiss the completion
+			editor.handleInput("\r");
+
+			assert.strictEqual(submitted, "/argtest two");
+		});
+
+		it("submits with single Enter when typed argument is an exact match but other completions also exist", () => {
+			const editor = new Editor(createTestTUI(), defaultEditorTheme);
+
+			const mockProvider: AutocompleteProvider = {
+				getSuggestions: (lines, _cursorLine, cursorCol) => {
+					const text = lines[0] || "";
+					const beforeCursor = text.slice(0, cursorCol);
+					const argtestMatch = beforeCursor.match(/^\/argtest\s+(\S+)$/);
+					if (argtestMatch) {
+						const argumentText = argtestMatch[1]!;
+						const allArguments = [
+							{ value: "two", label: "two" },
+							{ value: "two1", label: "two1" },
+						];
+						const filtered = allArguments.filter((arg) => arg.value.startsWith(argumentText));
+						if (filtered.length > 0) return { items: filtered, prefix: argumentText };
+					}
+					return null;
+				},
+				applyCompletion,
+			};
+
+			editor.setAutocompleteProvider(mockProvider);
+
+			let submitted = "";
+			editor.onSubmit = (text) => {
+				submitted = text;
+			};
+
+			for (const ch of "/argtest two") {
+				editor.handleInput(ch);
+			}
+
+			assert.strictEqual(editor.getText(), "/argtest two");
+			assert.strictEqual(editor.isShowingAutocomplete(), true);
+
+			// Both "two" and "two1" are visible, but "two" is an exact match and is highlighted
+			// Single Enter should submit with "two", not expand to "two1"
+			editor.handleInput("\r");
+
+			assert.strictEqual(submitted, "/argtest two");
+		});
+
+		it("applies exact typed slash-argument value on Enter and submits", () => {
 			const editor = new Editor(createTestTUI(), defaultEditorTheme);
 
 			// Mock provider for /argtest command with argument completions
@@ -2166,6 +2252,11 @@ describe("Editor component", () => {
 
 			editor.setAutocompleteProvider(mockProvider);
 
+			let submitted = "";
+			editor.onSubmit = (text) => {
+				submitted = text;
+			};
+
 			// Type "/argtest two"
 			editor.handleInput("/");
 			editor.handleInput("a");
@@ -2183,11 +2274,10 @@ describe("Editor component", () => {
 			assert.strictEqual(editor.getText(), "/argtest two");
 			assert.strictEqual(editor.isShowingAutocomplete(), true);
 
-			// Press Enter - should apply the exact typed value "two", not the first item
+			// Press Enter - should apply the exact typed value "two" and submit
 			editor.handleInput("\r");
 
-			// The exact typed value "two" should be retained
-			assert.strictEqual(editor.getText(), "/argtest two");
+			assert.strictEqual(submitted, "/argtest two");
 		});
 
 		it("selects first prefix match on Enter when typed arg is not exact match", () => {
@@ -2235,9 +2325,13 @@ describe("Editor component", () => {
 
 			assert.strictEqual(editor.isShowingAutocomplete(), true);
 
-			// Press Enter - "t" prefix matches "two" (first in list), so "two" is applied
+			// Press Enter - "t" prefix matches "two" (first in list), so "two" is applied and submitted
+			let submitted = "";
+			editor.onSubmit = (text) => {
+				submitted = text;
+			};
 			editor.handleInput("\r");
-			assert.strictEqual(editor.getText(), "/argtest two");
+			assert.strictEqual(submitted, "/argtest two");
 		});
 
 		it("highlights unique prefix match as user types (before full exact match)", () => {
@@ -2283,9 +2377,13 @@ describe("Editor component", () => {
 			assert.strictEqual(editor.getText(), "/argtest tw");
 			assert.strictEqual(editor.isShowingAutocomplete(), true);
 
-			// Press Enter - "tw" uniquely matches "two", so "two" should be applied
+			// Press Enter - "tw" uniquely matches "two", so "two" should be applied and submitted
+			let submitted = "";
+			editor.onSubmit = (text) => {
+				submitted = text;
+			};
 			editor.handleInput("\r");
-			assert.strictEqual(editor.getText(), "/argtest two");
+			assert.strictEqual(submitted, "/argtest two");
 		});
 
 		it("selects first prefix match when multiple items match", () => {
@@ -2328,9 +2426,13 @@ describe("Editor component", () => {
 
 			assert.strictEqual(editor.isShowingAutocomplete(), true);
 
-			// Press Enter - "t" matches "two" first, so "two" is selected
+			// Press Enter - "t" matches "two" first, so "two" is applied and submitted
+			let submitted = "";
+			editor.onSubmit = (text) => {
+				submitted = text;
+			};
 			editor.handleInput("\r");
-			assert.strictEqual(editor.getText(), "/argtest two");
+			assert.strictEqual(submitted, "/argtest two");
 		});
 
 		it("works for built-in-style command argument completion path (model-like)", () => {
@@ -2388,11 +2490,14 @@ describe("Editor component", () => {
 			assert.strictEqual(editor.getText(), "/model gpt-4o-mini");
 			assert.strictEqual(editor.isShowingAutocomplete(), true);
 
-			// Press Enter - should retain exact typed value, not apply first highlighted item
+			// Press Enter - should apply exact typed value and submit
+			let submitted = "";
+			editor.onSubmit = (text) => {
+				submitted = text;
+			};
 			editor.handleInput("\r");
 
-			// The exact typed value should be retained
-			assert.strictEqual(editor.getText(), "/model gpt-4o-mini");
+			assert.strictEqual(submitted, "/model gpt-4o-mini");
 		});
 
 		it("chains into argument completions after tab-completing slash command names", () => {

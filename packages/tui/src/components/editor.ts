@@ -631,7 +631,8 @@ export class Editor implements Component, Focusable {
 					this.state.cursorLine = result.cursorLine;
 					this.setCursorCol(result.cursorCol);
 
-					if (this.autocompletePrefix.startsWith("/")) {
+					const currentLine = this.state.lines[this.state.cursorLine] ?? "";
+					if (currentLine.trimStart().startsWith("/")) {
 						this.cancelAutocomplete();
 						// Fall through to submit
 					} else {
